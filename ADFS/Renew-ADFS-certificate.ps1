@@ -20,7 +20,7 @@ This script must be executed every 60 days (so before the Let’s Encrypt certif
     - Restarting the ADFS service.
     
  - Updating HPE GreenLake workspace SAML SSO details with the new ADFS certificate:
-    - Connecting to the HPE GreenLake workspace using the SAML SSO recovery email (the only user who can update the SAML SSO domain).
+    - Connecting to the HPE GreenLake workspace using the SAML SSO recovery email (the only user who can update the SAML SSO domain using the HPECOMCmdlets module).
     - Checking that the HPE GreenLake SAML SSO Domain is set with the correct ADFS server certificate.
     - If different, modifying the SAML SSO domain with the new ADFS certificate using the HPECOMCmdlets PowerShell module.
     
