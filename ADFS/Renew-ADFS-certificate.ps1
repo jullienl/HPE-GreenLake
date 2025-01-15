@@ -8,7 +8,7 @@ It includes all the necessary steps to update the ADFS certificate, both on the 
 
 This script is associated with a blog post on configuring HPE GreenLake SAML SSO Authentication with ADFS. For more details, visit: https://jullienl.github.io/Configuring-HPE-GreenLake-SSO-SAML-Authentication-with-ADFS/
 
-This script must be executed every 60 days (so before the Let’s Encrypt certificate expires) from the primary ADFS server and includes:
+This script must be executed every 60 days (so before the Let’s Encrypt certificate expires) on all ADFS servers in an ADFS farm and includes:
 
  - Downloading the ADFS certificate from pfSense (generated from Let’s Encrypt using the Acme package/service).
     
