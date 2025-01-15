@@ -51,6 +51,30 @@ Other useful commands:
 > Get-ScheduledJob -Name ADFS-Certificate--60d-Renewal
 > Unregister-scheduledjob -Name ADFS-Certificate--60d-Renewal
 
+Sample output:
+    Retrieving Let's Encrypt certificate 'example.com' from pfSense '192.168.1.1' in progress...
+    20250115_094129 : [INFO] : Export path = C:\Certificate-renewal-script\example.com.p12
+    The Let's Encrypt certificate is different from the one currently installed on the ADFS server. Renewal of the ADFS certificates is in progress...
+    Existing ADFS server certificate 406DF116715FBB7A677799D9220A743C73998AC5 has been removed!
+    The new Let's Encrypt certificate 66BE2C643461E9CAEF0D2E3B487AB161489EA88E has been imported successfully!
+    Full control permissions have been successfully assigned to the new certificate's private key for the ADFS service account!
+    Auto Certificate Rollover has been disabled successfully.
+    ADFS Token-Signing certificate updated successfully.
+    Old ADFS Token-Signing certificate has been removed successfully.
+    ADFS Token-Decrypting certificate updated successfully.
+    Old ADFS Token-Decrypting certificate has been removed successfully.
+    ADFS Service Communication certificate updated successfully.  
+    ADFS service restarted successfully.
+    ADFS metadata file has been successfully downloaded.
+    Retreiving the current ADFS certificate set in the SAML SSO domain 'example.com'
+    The new ADFS server certificate is different from the one currently defined in GreenLake. Updating the SAML SSO domain with the new certificate is in progress...
+    The HPE GreenLake SAML SSO domain 'example.com' has been successfully updated with the new ADFS certificate.
+    Retreiving the current SP certificate set in the SAML SSO domain 'example.com'.
+    Retreiving the relying party trust 'HPE GreenLake' set in ADFS for HPE GreenLake.
+    The X509 certificate of the relying party 'example.com' in ADFS is not valid. Update in progress...
+    The SP metadata file for the SAML SSO domain 'example.com' has been successfully downloaded from HPE GreenLake.
+    Relying party 'HPE GreenLake' has been updated successfully with the new metadata information.
+    ADFS service restarted successfully. Update completed! The new certificate is now in use.
 
 Author: lionel.jullien@hpe.com
 Date: January 2024
@@ -105,7 +129,7 @@ $PFSENSE_EncryptedPassword = "01000000d08c9ddf0115d1118c7a00c04fc297eb01000000ef
 # ConvertTo-SecureString -String $Password -AsPlainText -Force | ConvertFrom-SecureString  
 
 # HPE GreenLake User credential
-$GLP_Username = "sso_re_248aa396805c11ed88e216588ab64ce9@hpelabs.ddnsfree.com"
+$GLP_Username = "sso_re_248aa396805c11ed88e216588ab64ce9@example.com"
 $GLP_EncryptedPassword = "01000000d08c9ddf0115d1118c7a00c04fc297eb010000009051e8a93f01ed4a8b02456367bbd13c0000000002000000000003660000c000000010000000084007ecc92cf8321cc3b711bb889e610000000004800000a00000001000000083164401bb180f6b082cf61cbb3933c4380000005197cc46ecc9cab4ef223d897fb047c174fdce3f60d8f6702c5bc90648d81533c8c4f26284fc10813b332492392425f84b89fe69bcb09d4714000000cefa579bffc658512e6527ba90e8e3a884ff0905"
 
 # Name of the HPE GreenLake workspace
@@ -411,6 +435,7 @@ catch {
 
 # Download the ADFS certificate from pfsense (generated from Let's Encrypt using the Acme package/service)
 try {
+    Write-Host "Retrieving Let's Encrypt certificate '$CERTNAME' from pfSense '$pfsense' in progress..."
     Export-pfSenseCert -Session $Session -Name $CERTNAME -CertAction P12 -FilePath "$CERTDIR\$CERTNAME.p12" 
 }
 catch {
@@ -434,20 +459,20 @@ else {
 
 if ($NewCertificateThumbprint -eq $CurrentCertificateThumbprint) {
     
-    Write-Host "The new certificate is identical to the current one. Operation aborted!"
+    Write-Host "The Let's Encrypt certificate is identical to the one currently installed on the ADFS server. Operation aborted!"
     return
 }
 else {
 
-    Write-Host "The new certificate is different than the current one, the renewal of the ADFS certificate is in progress..."
+    Write-Host "The Let's Encrypt certificate is different from the one currently installed on the ADFS server. Renewal of the ADFS certificates is in progress..."
     
     # Remove existing certificate
     Remove-Item -Path $CurrentCertificate.PSPath | out-Null
-    Write-Output "Existing certificate $CurrentCertificateThumbprint has been removed!"
+    Write-Output "Existing ADFS server certificate $CurrentCertificateThumbprint has been removed!"
 
     # Import new p12 certificate to the ADFS server personal trust store
     Import-pfxCertificate -FilePath "$CERTDIR\$CERTNAME.p12" -CertStoreLocation $CertStoreLocation -Exportable | Out-Null
-    Write-Output "The new certificate $NewCertificateThumbprint has been imported successfully!"
+    Write-Output "The new Let's Encrypt certificate $NewCertificateThumbprint has been imported successfully!"
    
     # Assign full control permission to the new certificate private key for the ADFS service account #####
     $Newcertificate = Get-ChildItem $certStoreLocation | Where thumbprint -eq $NewCertificateThumbprint
@@ -458,16 +483,21 @@ else {
     $access_rule = New-Object System.Security.AccessControl.FileSystemAccessRule($account, "FullControl", 'None', 'None', 'Allow')
     $permissions.AddAccessRule($access_rule)
     Set-Acl -Path $path -AclObject $permissions
+    Write-Output "Full control permissions have been successfully assigned to the new certificate's private key for the ADFS service account!"
+
     
     # Disable Auto Certificate Rollover if enabled (required to add or set signing and encryption certificates)
     if ((Get-AdfsProperties | Select-Object -ExpandProperty AutoCertificateRollover) -eq $True){
 
         Set-AdfsProperties -AutoCertificateRollover $false
+        Write-Output "Auto Certificate Rollover has been disabled successfully."
+
     }
 
     # Update the ADFS Token-Signing Certificate
     try {
         Add-AdfsCertificate -CertificateType Token-Signing -Thumbprint $NewCertificateThumbprint -IsPrimary
+        Write-Output "ADFS Token-Signing certificate updated successfully."
     } 
     catch {
         Write-Error "Fail to update ADFS Token-Signing certificate. Error: $_"
@@ -480,6 +510,7 @@ else {
         try {
             $oldTokenSigningCertificate = Get-AdfsCertificate -CertificateType Token-Signing | Where-Object {$_.Thumbprint -ne $NewCertificateThumbprint} 
             Remove-AdfsCertificate -CertificateType Token-Signing -Thumbprint  $oldTokenSigningCertificate.Thumbprint
+            Write-Output "Old ADFS Token-Signing certificate has been removed successfully."
         } 
         catch {
             Write-Error "Fail to remove old ADFS Token-Signing certificate. Error: $_"
@@ -490,6 +521,7 @@ else {
     # Update the ADFS Token-Decrypting Certificate
     try {
         Add-AdfsCertificate -CertificateType Token-Decrypting -Thumbprint $NewCertificateThumbprint -IsPrimary
+        Write-Output "ADFS Token-Decrypting certificate updated successfully."
     } 
     catch {
         Write-Error "Fail to update ADFS Token-Decrypting certificate. Error: $_"
@@ -502,6 +534,7 @@ else {
         try {
             $oldTokenDecryptingCertificate = Get-AdfsCertificate -CertificateType Token-Decrypting | Where-Object {$_.Thumbprint -ne $NewCertificateThumbprint}     
             Remove-AdfsCertificate -CertificateType Token-Decrypting -Thumbprint  $oldTokenDecryptingCertificate.Thumbprint
+            Write-Output "Old ADFS Token-Decrypting certificate has been removed successfully."
         } 
         catch {
             Write-Error "Fail to remove old ADFS Token-Decrypting certificate. Error: $_"
@@ -513,6 +546,7 @@ else {
     # Update the ADFS Service Communication Certificate
     try {
         Set-AdfsSslCertificate -Thumbprint $NewCertificateThumbprint
+        Write-Output "ADFS Service Communication certificate updated successfully."
     } 
     catch {
         Write-Error "Fail to update ADFS Service Communication certificate. Error: $_"
@@ -522,10 +556,10 @@ else {
 
     # Restarting adfssrv service to enable the new certificate
     try {
-        Restart-Service adfssrv 
-        Write-Output "AD FS service restarted successfully."
+        Restart-Service adfssrv > $null 2>&1
+        Write-Output "ADFS service restarted successfully."
     } catch {
-        Write-Error "Failed to restart the AD FS service. Error: $_"
+        Write-Error "Failed to restart the ADFS service. Error: $_"
     }
     
     Start-Sleep -Seconds 5
@@ -539,6 +573,7 @@ else {
     # Get the X509 certificate of the ADFS server from the metadata file
     try {
         [xml]$MetadataXMLFile = Invoke-RestMethod -Uri $ADFSmetadataURL -Method Get 
+        Write-Output "ADFS metadata file has been successfully downloaded."
     } 
     catch {
         Write-Error "Fail to retreive ADFS metadata file. Error: $_"
@@ -550,39 +585,48 @@ else {
     # Connect to GLP using the SAML SSO recovery email (only user that can update the SAML SSO domain)
     $GLP_SecurePassword = ConvertTo-SecureString $GLP_EncryptedPassword
     $credentials = New-Object System.Management.Automation.PSCredential ($GLP_Username, $GLP_SecurePassword)
-    $GLP_connection = Connect-HPEGL -Credential $credentials -Workspace $WorkspaceName 
+    
+    try {
+        Connect-HPEGL -Credential $credentials -Workspace $WorkspaceName > $null 2>&1
+    } 
+    catch {
+        Write-Error "Fail to connect to the HPE GreenLake workspace '$WorkspaceName'. Error: $_"
+        return
+    }
 
     try {
         $CurrentADFSX509CertificateSetinGLP = Get-HPEGLWorkspaceSAMLSSODomain -DomainName $DomainName -ShowIDPCertificate
+        Write-Output "Retreiving the current ADFS certificate set in the SAML SSO domain '$DomainName'."
+
     } 
     catch {
-        Write-Error "Fail to update the SAML SSO domain with the new ADFS certificate. Error: $_"
+        Write-Error "Failed to fetch the current ADFS certificate set in the SAML SSO domain '$DomainName'. Error: $_"
         return
     }
 
     # Compare curent ADFS certificate set in GLP SAML SSO Domain with the new one
     if ($NewADFSX509Certificate -eq $CurrentADFSX509CertificateSetinGLP){
         
-        Write-Host "The new certificate is identical to the one currently configured in the SAML SSO domain. Operation aborted!"
+        Write-Host "The new ADFS server certificate is identical to the one currently configured in the SAML SSO domain. Operation aborted!"
         return
     }
     else {      
         
         # Updating GreenLake workspace SAML SSO details with new ADFS certificate 
 
-        Write-Host "The new certificate is different than the one currently defined in GreenLake, modification of the SAML SSO domain with the new ADFS certificate is in progress..."
+        Write-Host "The new ADFS server certificate is different from the one currently defined in GreenLake. Updating the SAML SSO domain with the new certificate is in progress..."
 
         # Update the SAML SSO domain with the new ADFS certificate
         try {
             $response = Set-HPEGLWorkspaceSAMLSSODomain -DomainName $DomainName -X509Certificate $NewADFSX509Certificate 
         } 
         catch {
-            Write-Error "Fail to update the SAML SSO domain with the new ADFS certificate. Error: $_"
+            Write-Error "Fail to update the SAML SSO domain '$DomainName' with the new ADFS certificate. Error: $_"
             return
         }
     
         if ($response.details -match "Successfully"){
-            Write-Host "The HPE GreenLake SAML SSO domain has been updated with the new ADFS certificate."
+            Write-Host "The HPE GreenLake SAML SSO domain '$DomainName' has been successfully updated with the new ADFS certificate."
 
         }
 
@@ -597,9 +641,10 @@ else {
         # Get the X509 certificate Thumbprint of the Service Provider (HPE GreenLake)  
         try { 
             $CurrentSPcertificate = Get-HPEGLWorkspaceSAMLSSODomain -DomainName $DomainName -ShowSPCertificate
+            Write-Output "Retreiving the current SP certificate set in the SAML SSO domain '$DomainName'."
         } 
         catch {
-            Write-Error "Failed to fetch the SP certificate. Error: $_"
+            Write-Error "Failed to fetch the SP certificate set in the SAML SSO domain '$DomainName'. Error: $_"
             return
         }
         # Convert the base64 string to a byte array
@@ -612,9 +657,10 @@ else {
         # Get the X509 certificate thumbprint of the Relying Party Trust set in ADFS (HPE GreenLake)   
         try {
             $HPEGreenLakeRelyingPartyTrust = Get-ADFSRelyingPartyTrust -Name $relyingPartyTrustName
+            Write-Output "Retreiving the relying party trust '$relyingPartyTrustName' set in ADFS for HPE GreenLake."
         } 
         catch {
-            Write-Error "Failed to fetch the relying party $relyingPartyTrustName. Error: $_"
+            Write-Error "Failed to fetch the relying party '$relyingPartyTrustName' set in ADFS for HPE GreenLake. Error: $_"
             return
         }
         # Get the signature certificate thumbprint
@@ -623,21 +669,22 @@ else {
         # Compare curent SP certificate set in ADFS Relying party with the HPE GreenLake server certificate
         if ($ServiceProviderCertificateThumbprint -eq $HPEGreenLakeRelyingPartyTrustCertificateThumbprint) {
             
-            Write-Host "The X509 certificate of the relying party set in ADFS for HPE GreenLake is up-to-date. No change is needed!"
+            Write-Host "The X509 certificate of the relying party '$relyingPartyTrustName' in ADFS is up-to-date. No change is needed!"
             return
             
         }
         else {
 
             # Update the ADFS configuration with any certificate changes from HPE GreenLake (Service Provider) 
-
-            Write-Host "The X509 certificate of the relying party set in ADFS for HPE GreenLake is not valid. Update in progress..."
+            Write-Host "The X509 certificate of the relying party '$relyingPartyTrustName' in ADFS is not valid. Update in progress..."
 
             try {
                 Get-HPEGLWorkspaceSAMLSSODomain -DomainName $DomainName -DownloadServiceProviderMetadata ./metadata.xml 
+                Write-Output "The SP metadata file for the SAML SSO domain '$DomainName' has been successfully downloaded from HPE GreenLake."
+
             } 
             catch {
-                Write-Error "Failed to fetch the SP metadata. Error: $_"
+                Write-Error "Failed to fetch the SP metadata file for the SAML SSO domain '$DomainName' from HPE GreenLake. Error: $_"
                 return
             }
     
@@ -647,19 +694,22 @@ else {
                 Write-Output "Relying party '$relyingPartyTrustName' has been updated successfully with the new metadata information."
     
             } catch {
-                Write-Error "Failed to update the relying party trust certificate. Error: $_"
+                Write-Error "Failed to update the ADFS relying party '$relyingPartyTrustName' certificate. Error: $_"
                 return
             }
                 
-            # Restart the AD FS service to apply the changes 
+            # Restart the ADFS service to apply the changes 
             try {
-                Restart-Service adfssrv 
-                Write-Output "AD FS service restarted successfully."
+                Restart-Service adfssrv > $null 2>&1
+                Write-Output "ADFS service restarted successfully. Update completed! The new certificate is now in use."
             } catch {
-                Write-Error "Failed to restart the AD FS service. Error: $_"
+                Write-Error "Failed to restart the ADFS service. Error: $_"
             }
         }               
     }
+
+    Disconnect-HPEGL
+
 }
     
 
@@ -668,4 +718,3 @@ else {
 Remove-Item "$CERTDIR\$CERTNAME.p12" -Force  
 Remove-Item ./metadata.xml  -Force  
 
-Disconnect-HPEGL
