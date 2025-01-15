@@ -37,7 +37,7 @@ Requirements:
 
 During execution, the script installs the pfSense and HPECOMCmdlets PowerShell modules if they are not already installed.
 
-Note: This script does not include the certificate update of Web Application Proxy (WAP) servers.
+Note: This script has been tested with PowerShell 7.4.6 Core edition and does not include the certificate update of Web Application Proxy (WAP) servers.
 
 
 Commands to create the scheduled task to run the script every 60 days (must be run as administrator priviledge):
@@ -51,7 +51,9 @@ Other useful commands:
 > Get-ScheduledJob -Name ADFS-Certificate--60d-Renewal
 > Unregister-scheduledjob -Name ADFS-Certificate--60d-Renewal
 
+
 Sample output:
+
     Retrieving Let's Encrypt certificate 'example.com' from pfSense '192.168.1.1' in progress...
     20250115_094129 : [INFO] : Export path = C:\Certificate-renewal-script\example.com.p12
     The Let's Encrypt certificate is different from the one currently installed on the ADFS server. Renewal of the ADFS certificates is in progress...
@@ -75,6 +77,7 @@ Sample output:
     The SP metadata file for the SAML SSO domain 'example.com' has been successfully downloaded from HPE GreenLake.
     Relying party 'HPE GreenLake' has been updated successfully with the new metadata information.
     ADFS service restarted successfully. Update completed! The new certificate is now in use.
+
 
 Author: lionel.jullien@hpe.com
 Date: January 2024
